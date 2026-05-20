@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Platform, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, Platform, StatusBar, Modal } from 'react-native';
 import { getDb } from '../../database/schema';
 import { useStore } from '../../store/useStore';
 
@@ -15,6 +15,8 @@ interface Booking {
 
 export default function VendorDashboard() {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const currentUser = useStore((state) => state.currentUser);
   const logout = useStore((state) => state.logout);
 
@@ -94,7 +96,14 @@ export default function VendorDashboard() {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.card}>
+          <TouchableOpacity 
+            style={styles.card}
+            activeOpacity={0.7}
+            onPress={() => {
+              setSelectedBooking(item);
+              setModalVisible(true);
+            }}
+          >
             <View style={styles.cardHeader}>
               <Text style={styles.name}>{item.customerName}</Text>
               <View style={[
@@ -125,9 +134,59 @@ export default function VendorDashboard() {
                 <Text style={styles.completeBtnText}>Mark as Completed ✓</Text>
               </TouchableOpacity>
             )}
-          </View>
+          </TouchableOpacity>
         )}
       />
+
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Job Details</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <Text style={styles.modalCloseBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {selectedBooking && (
+              <View style={styles.modalBody}>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Customer Name</Text>
+                  <Text style={styles.modalValue}>{selectedBooking.customerName}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Service Requested</Text>
+                  <Text style={styles.modalValue}>{selectedBooking.serviceCategory.toUpperCase()}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Location Area</Text>
+                  <Text style={styles.modalValue}>{selectedBooking.locationArea}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Requested Schedule</Text>
+                  <Text style={styles.modalValue}>{selectedBooking.serviceTime}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Status</Text>
+                  <Text style={[styles.modalValue, { color: selectedBooking.status === 'COMPLETED' ? '#31A24C' : '#E8590C' }]}>
+                    {selectedBooking.status}
+                  </Text>
+                </View>
+              </View>
+            )}
+            
+            <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => setModalVisible(false)}>
+              <Text style={styles.modalPrimaryBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -274,5 +333,69 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '85%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F0F2F5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E7F3FF',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#050505',
+  },
+  modalCloseBtn: {
+    fontSize: 18,
+    color: '#65676B',
+    fontWeight: '600',
+    padding: 4,
+  },
+  modalBody: {
+    padding: 16,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F2F5',
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: '#65676B',
+    fontWeight: '500',
+  },
+  modalValue: {
+    fontSize: 14,
+    color: '#050505',
+    fontWeight: '600',
+  },
+  modalPrimaryBtn: {
+    backgroundColor: '#1877F2',
+    padding: 14,
+    alignItems: 'center',
+    margin: 16,
+    borderRadius: 10,
+  },
+  modalPrimaryBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
   },
 });

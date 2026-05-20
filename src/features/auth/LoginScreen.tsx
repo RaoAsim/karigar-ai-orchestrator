@@ -117,20 +117,6 @@ export default function LoginScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-            
-            <View style={styles.demoInfo}>
-              <Text style={styles.demoInfoTitle}>Demo Access Accounts</Text>
-              
-              <View style={styles.demoRow}>
-                <Text style={styles.demoRole}>CUSTOMER</Text>
-                <Text style={styles.demoCreds}>03001234567 • password123</Text>
-              </View>
-
-              <View style={styles.demoRow}>
-                <Text style={styles.demoRoleVendor}>VENDOR</Text>
-                <Text style={styles.demoCreds}>03007654321 • password123</Text>
-              </View>
-            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -254,52 +240,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF', 
     fontSize: 16, 
     fontWeight: '700',
-  },
-  demoInfo: {
-    marginTop: 24, 
-    padding: 20, 
-    backgroundColor: '#E7F3FF', 
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#D4E9FF',
-  },
-  demoInfoTitle: {
-    fontSize: 14, 
-    fontWeight: '800',
-    color: '#1877F2', 
-    marginBottom: 12, 
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  demoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginVertical: 4,
-  },
-  demoRole: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#1877F2',
-    backgroundColor: '#D4E9FF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  demoRoleVendor: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#248A3D',
-    backgroundColor: '#D1F2D9',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  demoCreds: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#4B4F56', 
   },
   errorBanner: {
     backgroundColor: '#FFF0F0',

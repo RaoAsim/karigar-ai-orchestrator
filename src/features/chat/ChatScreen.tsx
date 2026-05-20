@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
   Dimensions,
+  Modal,
 } from "react-native";
 import { getDb } from "../../database/schema";
 import { SERVICE_CATEGORIES, useStore } from "../../store/useStore";
@@ -61,6 +62,8 @@ export default function ChatScreen() {
   const [isTyping, setIsTyping] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [extractedSummary, setExtractedSummary] = useState<any>(null);
+  const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<any>(null);
   const logout = useStore((state) => state.logout);
   const flatListRef = useRef<FlatList>(null);
 
@@ -83,7 +86,7 @@ export default function ChatScreen() {
     const pushLog = (msg: string) => activeLogs.push(msg);
 
     try {
-      pushLog("[Intake Agent]: Extracting intent via Gemini API...");
+      pushLog("[Agentic Gateway]: Parsing semantic intent & extracting context...");
 
       const currentHour = new Date().getHours();
       const currentTimeContext = `The current time in Pakistan is approximately ${currentHour > 12 ? currentHour - 12 : currentHour}:00 ${currentHour >= 12 ? 'PM' : 'AM'}.`;
@@ -199,7 +202,7 @@ export default function ChatScreen() {
 
       // 2. Proximity Fallback: If less than 3 matching providers, fetch other providers in city and calculate dynamic distance
       if (!matches || matches.length < 3) {
-        pushLog("[Matchmaker Agent]: Insufficient exact local matches. Initiating Proximity Fallback Search...");
+        pushLog("[Matchmaker Engine]: Identifying optimal provider routes in fallback zones...");
         const existingIds = matches ? matches.map(m => m.id) : [];
         const placeholders = existingIds.length > 0 ? existingIds.join(',') : '-1';
         const fallbackMatches = db.getAllSync<{
@@ -217,7 +220,7 @@ export default function ChatScreen() {
         );
 
         if (fallbackMatches && fallbackMatches.length > 0) {
-          pushLog(`[Matchmaker Agent]: Located ${fallbackMatches.length} fallback providers in neighboring sectors.`);
+          pushLog(`[Matchmaker Engine]: Locked ${fallbackMatches.length} dynamic route assignments.`);
           const resolvedFallback = fallbackMatches.map(m => ({
             ...m,
             distance_km: m.distance_km || Math.random() * 5 + 3.5 // slightly farther distance
@@ -227,7 +230,7 @@ export default function ChatScreen() {
       }
 
       if (matches && matches.length > 0) {
-        pushLog(`[Matchmaker Agent]: Resolved ${matches.length} total recommendations.`);
+        pushLog(`[Matchmaker Engine]: Finalized ${matches.length} prioritized matches.`);
         const providerMessage: Message = {
           id: (Date.now() + 1).toString(),
           sender: "system",
@@ -245,7 +248,7 @@ export default function ChatScreen() {
         setMessages((prev) => [...prev, providerMessage]);
       } else {
         // Fallback to generator agent with safety instruction to prevent duplicates
-        pushLog("[Matchmaker Agent]: No local match. Handing off to Generator Agent...");
+        pushLog("[Matchmaker Engine]: No local match. Handing off to synthesis layer...");
         const genModel = genAI.getGenerativeModel({
           model: "gemini-3.1-flash-lite",
           systemInstruction:
@@ -265,7 +268,7 @@ export default function ChatScreen() {
         });
 
         const profilePrompt = `Generate a worker profile for a ${summary.service_category} in ${summary.area}, ${summary.city}.`;
-        pushLog("[Generator Agent]: Synthesizing realistic provider profile...");
+        pushLog("[Synthesis Engine]: Resolving realistic provider data points...");
         const profileResult = await genModel.generateContent(profilePrompt);
         const profileData = JSON.parse(profileResult.response.text());
 
@@ -390,7 +393,13 @@ export default function ChatScreen() {
           </View>
           <View style={styles.receiptFooter}>
             <Text style={styles.receiptStatusText}>Your karigar has been notified and is preparing.</Text>
-            <TouchableOpacity style={styles.callBtn} onPress={() => {}}>
+            <TouchableOpacity 
+              style={styles.callBtn} 
+              onPress={() => {
+                setSelectedReceipt(item.receiptData);
+                setReceiptModalVisible(true);
+              }}
+            >
               <Text style={styles.callBtnText}>📋 View Booking Details</Text>
             </TouchableOpacity>
           </View>
@@ -417,6 +426,7 @@ export default function ChatScreen() {
                 <ProviderCard
                   key={provider.id}
                   {...provider}
+                  bookingTime={extractedSummary?.time_slot}
                   onBookingSuccess={() => {
                     setTimeout(() => {
                       const refId = Math.floor(Math.random() * 90000 + 10000);
@@ -433,9 +443,9 @@ export default function ChatScreen() {
                           bookingId: refId,
                         },
                         logs: [
-                          "[Notification Dispatch]: Sending real-time mobile push notifications...",
-                          "[Booking System]: Confirmed slot with artisan.",
-                          "[SMS Gateway]: Enqueued SMS booking receipt to customer.",
+                          "[Booking Core]: Locking schedule block...",
+                          "[Routing Engine]: Confirmed slot and optimized ETA.",
+                          "[Event Bus]: Enqueued SMS booking receipt to customer.",
                         ],
                       };
                       setMessages((prev) => [...prev, receiptMessage]);
@@ -479,6 +489,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
         <FlatList
           ref={flatListRef}
@@ -486,6 +497,7 @@ export default function ChatScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={styles.chatContainer}
+          onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
           onContentSizeChange={() =>
             flatListRef.current?.scrollToEnd({ animated: true })
           }
@@ -523,6 +535,58 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={receiptModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setReceiptModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Booking Details</Text>
+              <TouchableOpacity onPress={() => setReceiptModalVisible(false)}>
+                <Text style={styles.modalCloseBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {selectedReceipt && (
+              <View style={styles.modalBody}>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Reference ID</Text>
+                  <Text style={styles.modalValue}>#{selectedReceipt.bookingId}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Karigar</Text>
+                  <Text style={styles.modalValue}>{selectedReceipt.providerName}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Service</Text>
+                  <Text style={styles.modalValue}>{selectedReceipt.category.toUpperCase()}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Location</Text>
+                  <Text style={styles.modalValue}>{selectedReceipt.area}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Schedule</Text>
+                  <Text style={styles.modalValue}>{selectedReceipt.time}</Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Rate</Text>
+                  <Text style={styles.modalValue}>Rs. {selectedReceipt.hourlyRate}/hr</Text>
+                </View>
+              </View>
+            )}
+            
+            <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => setReceiptModalVisible(false)}>
+              <Text style={styles.modalPrimaryBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -811,5 +875,69 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 14,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '85%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F0F2F5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E7F3FF',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#050505',
+  },
+  modalCloseBtn: {
+    fontSize: 18,
+    color: '#65676B',
+    fontWeight: '600',
+    padding: 4,
+  },
+  modalBody: {
+    padding: 16,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F2F5',
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: '#65676B',
+    fontWeight: '500',
+  },
+  modalValue: {
+    fontSize: 14,
+    color: '#050505',
+    fontWeight: '600',
+  },
+  modalPrimaryBtn: {
+    backgroundColor: '#1877F2',
+    padding: 14,
+    alignItems: 'center',
+    margin: 16,
+    borderRadius: 10,
+  },
+  modalPrimaryBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
   },
 });

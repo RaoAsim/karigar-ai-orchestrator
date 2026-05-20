@@ -11,10 +11,11 @@ export interface ProviderCardProps {
   rating: number;
   hourlyRate?: number;
   distance?: number;
+  bookingTime?: string;
   onBookingSuccess?: () => void;
 }
 
-export default function ProviderCard({ id, name, serviceCategory, area, rating, hourlyRate, distance, onBookingSuccess }: ProviderCardProps) {
+export default function ProviderCard({ id, name, serviceCategory, area, rating, hourlyRate, distance, bookingTime, onBookingSuccess }: ProviderCardProps) {
   const [isBooked, setIsBooked] = useState(false);
   const currentUser = useStore((state) => state.currentUser);
   const showNotification = useStore((state) => state.showNotification);
@@ -29,7 +30,7 @@ export default function ProviderCard({ id, name, serviceCategory, area, rating, 
       const db = getDb();
       db.runSync(
         "INSERT INTO Bookings (customer_id, provider_id, service_time, status) VALUES (?, ?, ?, ?)",
-        [currentUser.id, id, "As soon as possible", "CONFIRMED"]
+        [currentUser.id, id, bookingTime || "As soon as possible", "CONFIRMED"]
       );
       
       showNotification(`Your booking with ${name} is confirmed!`);
