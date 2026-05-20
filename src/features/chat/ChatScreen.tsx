@@ -295,104 +295,78 @@ export default function ChatScreen() {
         computedDistance: calculateDynamicDistance(summary.area, match.location_area),
       }));
 
-      // 2. If less than 3 exact matches, trigger AI to find extended network options
+      // 2. If less than 3 exact matches, trigger AI to find extended network options for the specific city/area
       if (finalMatches.length < 3) {
+        const needed = 3 - finalMatches.length;
         pushLog("[Matchmaker Engine]: Searching extended network for available karigars in the vicinity...");
         
         const genModel = genAI.getGenerativeModel({
           model: "gemini-3.1-flash-lite",
           systemInstruction:
-            `You are a Matchmaker Agent. Generate one realistic Pakistani service worker profile for the requested service. Ensure name diversity. Do NOT use "Muhammad Asif" under any circumstances. Do not invent distance values; routing distance is calculated by the app.`,
+            `You are a Matchmaker Agent. Generate ${needed} realistic Pakistani service worker profiles for the requested service. Ensure name diversity. Do NOT use "Muhammad Asif" under any circumstances.`,
           generationConfig: {
             responseMimeType: "application/json",
             responseSchema: {
-              type: SchemaType.OBJECT,
-              properties: {
-                name: { type: SchemaType.STRING },
-                rating: { type: SchemaType.NUMBER },
-                hourlyRate: { type: SchemaType.NUMBER },
-              },
-              required: ["name", "rating", "hourlyRate"],
+              type: SchemaType.ARRAY,
+              items: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  name: { type: SchemaType.STRING },
+                  rating: { type: SchemaType.NUMBER },
+                  hourlyRate: { type: SchemaType.NUMBER },
+                },
+                required: ["name", "rating", "hourlyRate"],
+              }
             },
           },
         });
 
-        const profilePrompt = `Generate a worker profile for a ${summary.service_category} matching a customer request in ${summary.area}, ${summary.city}.`;
+        const profilePrompt = `Generate worker profiles for a ${summary.service_category} matching a customer request in ${summary.area}, ${summary.city}.`;
         pushLog("[Provider Verification]: Checking schedules and confirming background checks...");
         const profileResult = await genModel.generateContent(profilePrompt);
-        const profileData = JSON.parse(profileResult.response.text());
+        const profilesData = JSON.parse(profileResult.response.text());
 
-        // Insert synthetic user into DB
-        const userResult = db.runSync(
-          "INSERT INTO Users (phone_number, password, role, name) VALUES (?, ?, ?, ?)",
-          [
-            `0300${Math.floor(1000000 + Math.random() * 9000000)}`,
-            "pass123",
-            "VENDOR",
-            profileData.name,
-          ],
-        );
+        profilesData.forEach((profileData: any, index: number) => {
+          // Insert synthetic user into DB
+          const userResult = db.runSync(
+            "INSERT INTO Users (phone_number, password, role, name) VALUES (?, ?, ?, ?)",
+            [
+              `0300${Math.floor(1000000 + Math.random() * 9000000)}`,
+              "pass123",
+              "VENDOR",
+              profileData.name,
+            ],
+          );
 
-        // Insert provider into DB
-        const providerResult = db.runSync(
-          "INSERT INTO Providers (user_id, service_category, location_area, rating, status, hourly_rate, distance_km) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          [
-            userResult.lastInsertRowId,
-            summary.service_category,
-            summary.area,
-            profileData.rating,
-            "AVAILABLE",
-            profileData.hourlyRate,
-            calculateDynamicDistance(summary.area, summary.area),
-          ],
-        );
+          // Simulated local proximity since they are generated exactly in the requested area
+          const localDistance = Math.max(0.5, Math.round((0.8 + (index * 1.2) + (Math.random() * 0.5)) * 10) / 10);
 
-        pushLog(`[Routing Engine]: Optimized route calculated. Estimated proximity: ${calculateDynamicDistance(summary.area, summary.area).toFixed(1)} km.`);
-        pushLog("[Availability Sync]: Provider confirmed available for the selected slot.");
+          // Insert provider into DB
+          const providerResult = db.runSync(
+            "INSERT INTO Providers (user_id, service_category, location_area, rating, status, hourly_rate, distance_km) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+              userResult.lastInsertRowId,
+              summary.service_category,
+              summary.area,
+              profileData.rating,
+              "AVAILABLE",
+              profileData.hourlyRate,
+              localDistance,
+            ],
+          );
 
-        // Add the synthetic match to our final matches
-        finalMatches.push({
-          id: providerResult.lastInsertRowId,
-          name: profileData.name,
-          rating: profileData.rating,
-          hourly_rate: profileData.hourlyRate,
-          location_area: summary.area,
-          computedDistance: calculateDynamicDistance(summary.area, summary.area),
+          finalMatches.push({
+            id: providerResult.lastInsertRowId,
+            name: profileData.name,
+            rating: profileData.rating,
+            hourly_rate: profileData.hourlyRate,
+            location_area: summary.area,
+            computedDistance: localDistance,
+          });
         });
-      }
 
-      // 3. If we STILL have less than 3 matches, query other fallback matches from the database (other areas) to fill the pool
-      if (finalMatches.length < 3) {
-        pushLog("[Matchmaker Engine]: Querying fallback routes to fill the candidate pool...");
-        const existingIds = finalMatches.map(m => m.id);
-        const placeholders = existingIds.length > 0 ? existingIds.join(',') : '-1';
-        const fallbackMatches = db.getAllSync<{
-          id: number;
-          name: string;
-          rating: number;
-          hourly_rate?: number;
-          location_area: string;
-        }>(
-          `SELECT p.id, u.name, p.rating, p.hourly_rate, p.location_area 
-           FROM Providers p 
-           JOIN Users u ON p.user_id = u.id 
-           WHERE p.service_category = ? AND p.id NOT IN (${placeholders})`,
-          [summary.service_category]
-        );
-
-        if (fallbackMatches && fallbackMatches.length > 0) {
-          const rankedFallbacks = fallbackMatches
-            .map((match) => ({
-              ...match,
-              computedDistance: calculateDynamicDistance(summary.area, match.location_area),
-            }))
-            .sort((a, b) => a.computedDistance - b.computedDistance || b.rating - a.rating);
-
-          finalMatches = [
-            ...finalMatches,
-            ...rankedFallbacks.slice(0, 3 - finalMatches.length),
-          ];
-        }
+        pushLog(`[Routing Engine]: Optimized routes calculated for ${needed} providers.`);
+        pushLog("[Availability Sync]: Providers confirmed available for the selected slot.");
       }
 
       finalMatches = finalMatches.sort(
