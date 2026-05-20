@@ -1,61 +1,68 @@
-# Karigar: Agentic AI for the Informal Economy
+# Karigar - Agentic AI Orchestrator
 
-Karigar is an Agentic AI system designed to automate the end-to-end lifecycle of informal service requests in Pakistan. By replacing fragmented WhatsApp messages and phone calls with an intelligent orchestration pipeline, Karigar connects customers with local professionals such as plumbers, electricians, AC technicians, and tutors.
+Karigar is an intelligent, agent-driven platform designed to formalize Pakistan's informal economy. It transforms unstructured, natural language requests (Urdu, Roman Urdu, English) into structured, optimized service bookings for plumbers, electricians, beauticians, and more.
 
-## Project Solution
-This prototype demonstrates a closed-loop economy driven entirely by a multi-agent reasoning pipeline. It handles intent extraction in Roman Urdu and English, geographic matchmaking, simulated bookings, and automated follow-ups.
+## Problem Statement
+The informal economy relies heavily on WhatsApp, word-of-mouth, and phone calls, leading to inefficient matching, missed opportunities, and zero automation. Customers struggle to find reliable, available artisans in real-time.
 
-### Key Features
-1. **Natural Language Intake:** Users can submit requests in natural language (e.g., "Mujhe kal subah G-13 mein AC technician chahiye").
-2. **Dynamic Matchmaking:** Providers are ranked based on simulated proximity (distance_km), availability, and ratings.
-3. **Traceable Agentic UI:** Users can expand collapsed bubbles to view the exact reasoning logs of the internal agents.
-4. **Action and Follow-Up Automation:** Complete simulation of booking records, dispatch updates, and status-completion loops.
-5. **Dual-Role Economy:** A Customer chat interface coupled with a dedicated Vendor Dashboard for managing statuses.
+## Solution Overview
+Karigar utilizes a multi-step agentic workflow orchestrated via Google Generative AI to understand intent, discover local providers, simulate booking handshakes, and manage the complete lifecycle of a service request.
 
----
-
-## System Architecture and Agentic Workflow
-
-The application relies on a structured reasoning pipeline powered by the Gemini API, orchestrated into distinct agents that handle specific lifecycle phases.
-
-### 1. The Intake Agent (Planning)
-- **Role:** Parses unstructured, multilingual input using strict JSON schemas.
-- **Logic:** Extracts the service category, city, area, and time slot. If context is missing, it performs geographic inference (e.g., mapping a specific neighborhood to its city). If it detects a formal profession (e.g., Doctor, Software Engineer), it triggers a scoped refusal to maintain informal economy guardrails.
-
-### 2. The Matchmaker Agent (Decision)
-- **Role:** Interfaces the LLM output with the local database.
-- **Logic:** Executes SQL queries across the Providers and Users tables. It calculates proximity, evaluates ratings, and ranks the top 3 viable matching providers.
-
-### 3. The Generator Agent (Fallback)
-- **Role:** Synthesizes mock provider profiles.
-- **Logic:** If no local SQLite match is found, this agent generates a realistic provider profile and seeds the database dynamically, ensuring the user always receives a viable recommendation.
-
-### 4. Action and Follow-Up (Execution)
-- **Action:** Clicking "Book Now" executes local SQLite transactions (INSERT INTO Bookings).
-- **Follow-Up Automation:** Staggered asynchronous loops simulate dispatch updates ("Provider is on their way"), mock SMS receipts, and status updates (Vendors marking jobs as COMPLETED triggers customer feedback requests).
+### Core Features
+1. **Multilingual Intent Parsing**: Natively understands Urdu, Roman Urdu, and English.
+2. **Context-Aware Scheduling**: Dynamically translates relative time (e.g., "aj raat", "kal subah") into concrete, actionable time slots based on the user's real-time clock.
+3. **Agentic Pipeline**: Utilizes distinct logical agents (Intake Agent, Matchmaker Engine, Synthesis/Generator Agent) to process the request end-to-end.
+4. **Transparent Reasoning**: A built-in Agentic Console allows users (and judges) to see the exact execution logs, matching logic, and state changes happening under the hood.
+5. **Dual-Sided Simulation**: Features both a Customer Interface (for chat-based booking) and a Vendor Dashboard (for real-time job management and completion).
 
 ---
 
-## Technical Stack and Tools Used
+## Agentic Architecture & Workflow
 
-- **Frontend:** React Native (Expo)
-- **Local Database:** expo-sqlite (Managing the provider dataset and tracking booking states locally).
-- **State Management:** Zustand (Managing user sessions and global notification states).
-- **AI Integration:** @google/generative-ai (Gemini models used for schema-enforced intent extraction).
+The system relies on a sequence of orchestrated agent logic loops:
+
+1. **[Agentic Gateway] Intent Extraction**: 
+   - Uses `gemini-3.1-flash-lite` to extract service type, location, city, and time. 
+   - Handles gracefully rejecting out-of-scope requests (e.g., formal professions like Doctors/Lawyers).
+2. **[Matchmaker Engine] Discovery & Ranking**:
+   - Queries the local dataset to find exact location and category matches.
+   - Computes proximity distances and ranks providers based on distance and rating.
+   - If local matches are insufficient, initiates a Proximity Fallback Search to locate artisans in neighboring sectors.
+3. **[Synthesis Engine] Generative Fallback**:
+   - If no providers exist in the mock dataset, a generator agent synthesizes a realistic, culturally appropriate provider profile on the fly and seeds it into the marketplace.
+4. **[Booking Core] Action Simulation**:
+   - Executes the simulated booking by locking the schedule in the local SQLite database.
+   - Dispatches internal notifications.
+   - Schedules automated follow-up reminders.
 
 ---
 
-## How Google Antigravity is Used
+## Technical Stack & Implementation
 
-Google Antigravity served as the central autonomous orchestration platform for building this system. Antigravity functioned as the primary development and architectural partner to:
-- **Orchestrate Agent Workflows:** Designing the prompt engineering state-machines that allow the Intake and Matchmaker agents to pass data contextually.
-- **Manage Multi-Step Reasoning:** Architecting the collapsible log interface and local trace-state logic to expose the internal planning loop directly to the user.
-- **Execute Actions:** Writing secure SQLite schema migrations and transaction loops necessary for the simulation requirements.
+- **Framework**: React Native (Expo)
+- **AI/LLM**: `@google/generative-ai` (Gemini Flash Lite)
+- **State Management**: Zustand
+- **Local Database**: SQLite (expo-sqlite) for Mock Data Simulation
+- **Styling**: Custom Design System with Platform-Specific Safe Areas and Vector Icons
+
+### APIs and Tools Used
+- **Gemini SDK**: Core brain for natural language parsing and decision routing.
+- **Expo Notifications**: For simulating real-time push alerts to providers and customers.
+- **Expo SQLite**: Handles the mock database simulating the central matching server.
+
+### Assumptions & Limitations
+- **Mock Data**: Due to the lack of live provider APIs, the system utilizes a seeded SQLite database of ~14 distinct artisans across Islamabad.
+- **Simulated Execution**: Payments and SMS dispatch are logged and simulated in the application state rather than hitting real payment gateways.
+- **Location Inference**: Assumes Islamabad as the default operational city unless explicitly specified otherwise by the user.
 
 ---
 
-## Assumptions and Limitations
+## Setup Instructions
 
-1. **Mock Database:** Due to hackathon scope, provider discovery is simulated via a seeded local SQLite database rather than a live Google Maps/Places API integration.
-2. **Simulated Notifications:** SMS receipts, automated reminders, and push notifications are simulated via timed in-app UI Toasts and Chat Bubbles rather than external Twilio/Firebase integrations.
-3. **Proximity:** Proximity calculations are currently based on area overlap to demonstrate ranking logic rather than using strict GPS coordinate delta calculations.
+1. **Clone the repository**
+2. **Install Dependencies**: `npm install`
+3. **Environment Setup**: Create a `.env` file at the root and add your Gemini API Key:
+   `EXPO_PUBLIC_GEMINI_API_KEY=your_key_here`
+4. **Run Application**: 
+   - `npm run ios` or `npm run android`
+   - *Note: On first run, the SQLite database will automatically seed. If you experience stale data, clear the app cache on the simulator/device to re-trigger the DB seed.*
