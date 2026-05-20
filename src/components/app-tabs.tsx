@@ -1,15 +1,14 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { useColorScheme, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '../store/useStore';
 
-import { Colors } from '@/constants/theme';
-
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const insets = useSafeAreaInsets();
   const currentUser = useStore((state) => state.currentUser);
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'ios' ? 16 : 14);
 
   const getFirstTabName = () => {
     if (!currentUser) return 'Find Karigar';
@@ -27,7 +26,21 @@ export default function AppTabs() {
         headerShown: false,
         tabBarActiveTintColor: '#1877F2',
         tabBarInactiveTintColor: '#8A8D91',
-        tabBarStyle: { paddingTop: 6, backgroundColor: '#FFFFFF', paddingBottom: Platform.OS === 'ios' ? 20 : 8, height: Platform.OS === 'ios' ? 80 : 65 },
+        sceneStyle: { backgroundColor: '#F0F2F5' },
+        tabBarStyle: {
+          height: 58 + bottomPadding,
+          paddingTop: 8,
+          paddingBottom: bottomPadding,
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: 1,
+          borderTopColor: '#E7F3FF',
+          elevation: 12,
+          shadowColor: '#050505',
+          shadowOpacity: 0.08,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: -2 },
+        },
+        tabBarItemStyle: { paddingVertical: 4 },
         tabBarLabelStyle: { fontWeight: '600', fontSize: 11 },
       }}
     >

@@ -8,6 +8,7 @@ export interface ProviderCardProps {
   name: string;
   serviceCategory: string;
   area: string;
+  jobArea?: string;
   rating: number;
   hourlyRate?: number;
   distance?: number;
@@ -15,7 +16,7 @@ export interface ProviderCardProps {
   onBookingSuccess?: () => void;
 }
 
-export default function ProviderCard({ id, name, serviceCategory, area, rating, hourlyRate, distance, bookingTime, onBookingSuccess }: ProviderCardProps) {
+export default function ProviderCard({ id, name, serviceCategory, area, jobArea, rating, hourlyRate, distance, bookingTime, onBookingSuccess }: ProviderCardProps) {
   const [isBooked, setIsBooked] = useState(false);
   const currentUser = useStore((state) => state.currentUser);
   const showNotification = useStore((state) => state.showNotification);
@@ -29,14 +30,14 @@ export default function ProviderCard({ id, name, serviceCategory, area, rating, 
     try {
       const db = getDb();
       db.runSync(
-        "INSERT INTO Bookings (customer_id, provider_id, service_time, status) VALUES (?, ?, ?, ?)",
-        [currentUser.id, id, bookingTime || "As soon as possible", "CONFIRMED"]
+        "INSERT INTO Bookings (customer_id, provider_id, service_time, status, job_location) VALUES (?, ?, ?, ?, ?)",
+        [currentUser.id, id, bookingTime || "As soon as possible", "CONFIRMED", jobArea || area]
       );
       
       showNotification(`Your booking with ${name} is confirmed!`);
       // After a short delay show the simulated vendor notification
       setTimeout(() => {
-        showVendorNotification(`New Job Request: ${serviceCategory.toUpperCase()} at ${area}`);
+        showVendorNotification(`New Job Request: ${serviceCategory.toUpperCase()} at ${jobArea || area}`);
       }, 1200);
       triggerBookingRefresh();
       setLastBookedProviderId(id);

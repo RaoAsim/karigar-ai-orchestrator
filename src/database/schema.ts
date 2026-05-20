@@ -46,6 +46,7 @@ export const initDb = () => {
         provider_id INTEGER NOT NULL,
         service_time TEXT NOT NULL,
         status TEXT NOT NULL CHECK(status IN ('PENDING', 'CONFIRMED', 'COMPLETED')),
+        job_location TEXT,
         FOREIGN KEY (customer_id) REFERENCES Users(id),
         FOREIGN KEY (provider_id) REFERENCES Providers(id)
       );
@@ -54,6 +55,7 @@ export const initDb = () => {
     // Schema evolutions
     try { db.execSync('ALTER TABLE Providers ADD COLUMN hourly_rate REAL;'); } catch (e) {}
     try { db.execSync('ALTER TABLE Providers ADD COLUMN distance_km REAL;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE Bookings ADD COLUMN job_location TEXT;'); } catch (e) {}
   } catch (error) {
     console.error('Error initializing DB schema:', error);
   }

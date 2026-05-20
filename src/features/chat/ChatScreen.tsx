@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -12,9 +12,9 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Dimensions,
   Modal,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getDb } from "../../database/schema";
 import { SERVICE_CATEGORIES, useStore } from "../../store/useStore";
 import ProviderCard, { ProviderCardProps } from "../booking/ProviderCard";
@@ -50,6 +50,7 @@ interface Message {
 }
 
 export default function ChatScreen() {
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "initial",
@@ -66,6 +67,19 @@ export default function ChatScreen() {
   const [selectedReceipt, setSelectedReceipt] = useState<any>(null);
   const logout = useStore((state) => state.logout);
   const flatListRef = useRef<FlatList>(null);
+
+  const scrollToLatestMessage = (animated = true) => {
+    requestAnimationFrame(() => {
+      flatListRef.current?.scrollToEnd({ animated });
+    });
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated });
+    }, 120);
+  };
+
+  useEffect(() => {
+    scrollToLatestMessage();
+  }, [messages.length, isTyping]);
 
   const handleSend = async () => {
     if (!inputText.trim()) return;
@@ -122,11 +136,11 @@ export default function ChatScreen() {
 
       const prompt = `Conversation History:\n${conversationHistory}`;
 
-      pushLog(`[Intake Agent]: Sending prompt to Gemini API...`);
+      pushLog(`[Agentic Gateway]: Analysing conversation history and context...`);
       const result = await model.generateContent(prompt);
       const responseText = result.response.text();
 
-      pushLog(`[Intake Agent]: Parsed intent successfully.`);
+      pushLog(`[Agentic Gateway]: Intent parsed successfully.`);
 
       const parsed = JSON.parse(responseText);
 
@@ -139,7 +153,7 @@ export default function ChatScreen() {
         };
         setMessages((prev) => [...prev, systemMessage]);
       } else if (parsed.is_complete) {
-        pushLog("[Intake Agent]: Intent extracted successfully. Awaiting customer confirmation...");
+        pushLog("[Agentic Gateway]: Semantic intent resolved. Awaiting customer double confirmation...");
         setIsConfirming(true);
         setExtractedSummary(parsed.extracted_data);
 
@@ -176,11 +190,10 @@ export default function ChatScreen() {
 
     const activeLogs: string[] = [
       "[Customer Decision]: Confirmed booking parameters.",
-      "[Matchmaker Agent]: Querying SQLite for optimal matches..."
+      "[Matchmaker Engine]: Querying SQLite database for optimal matches..."
     ];
     const pushLog = (msg: string) => {
       activeLogs.push(msg);
-      // Ensure we push log update
     };
 
     const db = getDb();
@@ -192,8 +205,9 @@ export default function ChatScreen() {
         rating: number;
         hourly_rate?: number;
         distance_km?: number;
+        location_area: string;
       }>(
-        `SELECT p.id, u.name, p.rating, p.hourly_rate, p.distance_km 
+        `SELECT p.id, u.name, p.rating, p.hourly_rate, p.distance_km, p.location_area 
          FROM Providers p 
          JOIN Users u ON p.user_id = u.id 
          WHERE p.service_category = ? AND p.location_area = ? LIMIT 3`,
@@ -211,8 +225,9 @@ export default function ChatScreen() {
           rating: number;
           hourly_rate?: number;
           distance_km?: number;
+          location_area: string;
         }>(
-          `SELECT p.id, u.name, p.rating, p.hourly_rate, p.distance_km 
+          `SELECT p.id, u.name, p.rating, p.hourly_rate, p.distance_km, p.location_area 
            FROM Providers p 
            JOIN Users u ON p.user_id = u.id 
            WHERE p.service_category = ? AND p.id NOT IN (${placeholders}) LIMIT 3`,
@@ -223,7 +238,7 @@ export default function ChatScreen() {
           pushLog(`[Matchmaker Engine]: Locked ${fallbackMatches.length} dynamic route assignments.`);
           const resolvedFallback = fallbackMatches.map(m => ({
             ...m,
-            distance_km: m.distance_km || Math.random() * 5 + 3.5 // slightly farther distance
+            distance_km: m.distance_km || Math.random() * 5 + 3.5
           }));
           matches = [...(matches || []), ...resolvedFallback].slice(0, 3);
         }
@@ -239,7 +254,8 @@ export default function ChatScreen() {
             id: match.id,
             name: match.name,
             serviceCategory: summary.service_category,
-            area: summary.area,
+            area: match.location_area || summary.area,
+            jobArea: summary.area,
             rating: match.rating,
             hourlyRate: match.hourly_rate || 500,
             distance: match.distance_km || Math.random() * 4.5 + 0.5,
@@ -309,6 +325,7 @@ export default function ChatScreen() {
               name: profileData.name,
               serviceCategory: summary.service_category,
               area: summary.area,
+              jobArea: summary.area,
               rating: profileData.rating,
               hourlyRate: profileData.hourlyRate,
               distance: dynamicDist,
@@ -437,7 +454,7 @@ export default function ChatScreen() {
                         receiptData: {
                           providerName: provider.name,
                           category: provider.serviceCategory,
-                          area: provider.area,
+                          area: provider.jobArea || provider.area,
                           time: extractedSummary ? extractedSummary.time_slot : "Today at 2:00 PM",
                           hourlyRate: provider.hourlyRate || 500,
                           bookingId: refId,
@@ -488,7 +505,7 @@ export default function ChatScreen() {
       </View>
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
         <FlatList
@@ -497,24 +514,28 @@ export default function ChatScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={styles.chatContainer}
-          onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          onContentSizeChange={() =>
-            flatListRef.current?.scrollToEnd({ animated: true })
+          keyboardShouldPersistTaps="handled"
+          ListFooterComponent={
+            isTyping ? (
+              <View
+                style={[
+                  styles.messageBubbleWrapper,
+                  styles.systemBubbleWrapper,
+                  styles.typingFooter,
+                ]}
+              >
+                <CollapsibleLog
+                  logs={["Connecting to Gemini..."]}
+                  isThinking={true}
+                />
+              </View>
+            ) : null
           }
+          onLayout={() => scrollToLatestMessage(false)}
+          onContentSizeChange={() => scrollToLatestMessage()}
         />
 
-        {isTyping && (
-          <View
-            style={[styles.messageBubbleWrapper, styles.systemBubbleWrapper]}
-          >
-            <CollapsibleLog
-              logs={["Connecting to Gemini..."]}
-              isThinking={true}
-            />
-          </View>
-        )}
-
-        <View style={styles.inputContainer}>
+        <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <TextInput
             style={[styles.input, (isLoading || isConfirming) && styles.inputDisabled]}
             placeholder={isConfirming ? "Confirm or adjust request above..." : "E.g., G-13 mein AC technician chahiye"}
@@ -624,8 +645,13 @@ const styles = StyleSheet.create({
   },
   chatContainer: {
     padding: 16,
+    paddingBottom: 20,
     flexGrow: 1,
     justifyContent: "flex-end",
+  },
+  typingFooter: {
+    marginTop: 4,
+    marginBottom: 10,
   },
   providersScroll: {
     flexDirection: "row",

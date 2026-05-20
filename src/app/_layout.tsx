@@ -1,6 +1,8 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import * as SystemUI from 'expo-system-ui';
 import React, { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
@@ -16,17 +18,22 @@ export default function TabLayout() {
   useEffect(() => {
     initDb();
     seedDb();
+    SystemUI.setBackgroundColorAsync('#FFFFFF').catch(() => {});
     registerForPushNotificationsAsync();
   }, []);
 
-  if (!currentUser) {
-    return <LoginScreen />;
-  }
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        {currentUser ? (
+          <>
+            <AnimatedSplashOverlay />
+            <AppTabs />
+          </>
+        ) : (
+          <LoginScreen />
+        )}
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

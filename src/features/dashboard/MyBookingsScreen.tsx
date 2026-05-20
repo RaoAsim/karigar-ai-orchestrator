@@ -15,7 +15,7 @@ export default function MyBookingsScreen() {
     try {
       const db = getDb();
       const results = db.getAllSync<any>(
-        `SELECT b.id, p.service_category as serviceCategory, p.location_area as area, u.name as providerName, b.service_time as serviceTime, b.status 
+        `SELECT b.id, p.service_category as serviceCategory, COALESCE(b.job_location, p.location_area) as area, u.name as providerName, b.service_time as serviceTime, b.status 
          FROM Bookings b 
          JOIN Providers p ON b.provider_id = p.id 
          JOIN Users u ON p.user_id = u.id 

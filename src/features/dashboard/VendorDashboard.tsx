@@ -41,7 +41,7 @@ export default function VendorDashboard() {
       if (provider) {
         const results = db.getAllSync<any>(
           `SELECT b.id, u.name as customerName, b.service_time as serviceTime, b.status, 
-                  p.service_category as serviceCategory, p.location_area as locationArea, p.distance_km as distanceKm
+                  p.service_category as serviceCategory, COALESCE(b.job_location, p.location_area) as locationArea, p.distance_km as distanceKm
            FROM Bookings b 
            JOIN Users u ON b.customer_id = u.id 
            JOIN Providers p ON b.provider_id = p.id
