@@ -25,6 +25,75 @@ const genAI = new GoogleGenerativeAI(API_KEY);
 
 const CATEGORY_LIST = SERVICE_CATEGORIES.join(", ");
 
+const AREA_COORDINATES: Record<string, { x: number; y: number }> = {
+  'f-6': { x: 10, y: 10 },
+  'f-7': { x: 8, y: 10 },
+  'f-8': { x: 6, y: 10 },
+  'f-10': { x: 4, y: 10 },
+  'f-11': { x: 2, y: 10 },
+  'g-6': { x: 10, y: 8 },
+  'g-7': { x: 8, y: 8 },
+  'g-8': { x: 7, y: 8 },
+  'g-9': { x: 6, y: 8 },
+  'g-10': { x: 4, y: 8 },
+  'g-11': { x: 2, y: 8 },
+  'g-13': { x: 0, y: 8 },
+  'blue area': { x: 9, y: 9 },
+  'i-8': { x: 8, y: 6 },
+  'i-9': { x: 6, y: 6 },
+  'i-10': { x: 4, y: 6 },
+  'koral': { x: 13, y: 2 },
+  'koral town': { x: 13, y: 2 },
+  'khanna': { x: 12, y: 3 },
+  'pakistan town': { x: 15, y: 0 },
+  'gulberg green': { x: 18, y: -5 },
+  'gulberg greens': { x: 18, y: -5 },
+  'gulberg': { x: 18, y: -5 },
+  'bahria town': { x: 20, y: -12 },
+  'dha': { x: 22, y: -10 }
+};
+
+const AREA_ALIASES: Record<string, string> = {
+  'gulberg greens': 'gulberg green',
+  'koral town': 'koral',
+  'koral chowk': 'koral',
+};
+
+const normalizeAreaKey = (area: string) => {
+  const normalized = area.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, ' ').trim();
+  return AREA_ALIASES[normalized] || normalized;
+};
+
+export function calculateDynamicDistance(fromArea: string, toArea: string): number {
+  if (!fromArea || !toArea) return 1.5;
+  const normFrom = normalizeAreaKey(fromArea);
+  const normTo = normalizeAreaKey(toArea);
+  
+  if (normFrom === normTo) {
+    return 0.8;
+  }
+  
+  const fromCoord = AREA_COORDINATES[normFrom] || { x: 6, y: 8 }; // default to center G-9
+  const toCoord = AREA_COORDINATES[normTo] || { x: 6, y: 8 };
+  
+  const dx = fromCoord.x - toCoord.x;
+  const dy = fromCoord.y - toCoord.y;
+  
+  // Euclidean distance in km times road routing deviation multiplier
+  const distance = Math.sqrt(dx * dx + dy * dy) * 1.25;
+  
+  return Math.max(0.5, Math.round(distance * 10) / 10);
+}
+
+type MatchCandidate = {
+  id: number;
+  name: string;
+  rating: number;
+  hourly_rate?: number;
+  location_area: string;
+  computedDistance: number;
+};
+
 interface Message {
   id: string;
   text?: string;
@@ -38,6 +107,7 @@ interface Message {
     area: string;
     time_slot: string;
   };
+  confirmationResponded?: "YES" | "NO";
   isReceiptCard?: boolean;
   receiptData?: {
     providerName: string;
@@ -183,7 +253,14 @@ export default function ChatScreen() {
     }
   };
 
-  const handleConfirmMatch = async (summary: any) => {
+  const handleConfirmMatch = async (summary: any, messageId?: string) => {
+    if (messageId) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, confirmationResponded: "YES" } : m
+        )
+      );
+    }
     setIsConfirming(false);
     setIsLoading(true);
     setIsTyping(true);
@@ -199,76 +276,33 @@ export default function ChatScreen() {
     const db = getDb();
     try {
       // 1. Try local exact match
-      let matches = db.getAllSync<{
+      let exactMatches = db.getAllSync<{
         id: number;
         name: string;
         rating: number;
         hourly_rate?: number;
-        distance_km?: number;
         location_area: string;
       }>(
-        `SELECT p.id, u.name, p.rating, p.hourly_rate, p.distance_km, p.location_area 
+        `SELECT p.id, u.name, p.rating, p.hourly_rate, p.location_area 
          FROM Providers p 
          JOIN Users u ON p.user_id = u.id 
-         WHERE p.service_category = ? AND p.location_area = ? LIMIT 3`,
-        [summary.service_category, summary.area]
+         WHERE p.service_category = ? AND (LOWER(p.location_area) = ? OR LOWER(p.location_area) = ?) LIMIT 3`,
+        [summary.service_category, summary.area.toLowerCase().trim(), normalizeAreaKey(summary.area)]
       );
 
-      // 2. Proximity Fallback: If less than 3 matching providers, fetch other providers in city and calculate dynamic distance
-      if (!matches || matches.length < 3) {
-        pushLog("[Matchmaker Engine]: Identifying optimal provider routes in fallback zones...");
-        const existingIds = matches ? matches.map(m => m.id) : [];
-        const placeholders = existingIds.length > 0 ? existingIds.join(',') : '-1';
-        const fallbackMatches = db.getAllSync<{
-          id: number;
-          name: string;
-          rating: number;
-          hourly_rate?: number;
-          distance_km?: number;
-          location_area: string;
-        }>(
-          `SELECT p.id, u.name, p.rating, p.hourly_rate, p.distance_km, p.location_area 
-           FROM Providers p 
-           JOIN Users u ON p.user_id = u.id 
-           WHERE p.service_category = ? AND p.id NOT IN (${placeholders}) LIMIT 3`,
-          [summary.service_category]
-        );
+      let finalMatches: MatchCandidate[] = exactMatches.map((match) => ({
+        ...match,
+        computedDistance: calculateDynamicDistance(summary.area, match.location_area),
+      }));
 
-        if (fallbackMatches && fallbackMatches.length > 0) {
-          pushLog(`[Matchmaker Engine]: Locked ${fallbackMatches.length} dynamic route assignments.`);
-          const resolvedFallback = fallbackMatches.map(m => ({
-            ...m,
-            distance_km: m.distance_km || Math.random() * 5 + 3.5
-          }));
-          matches = [...(matches || []), ...resolvedFallback].slice(0, 3);
-        }
-      }
-
-      if (matches && matches.length > 0) {
-        pushLog(`[Matchmaker Engine]: Finalized ${matches.length} prioritized matches.`);
-        const providerMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          sender: "system",
-          logs: [...activeLogs],
-          providersData: matches.map((match) => ({
-            id: match.id,
-            name: match.name,
-            serviceCategory: summary.service_category,
-            area: match.location_area || summary.area,
-            jobArea: summary.area,
-            rating: match.rating,
-            hourlyRate: match.hourly_rate || 500,
-            distance: match.distance_km || Math.random() * 4.5 + 0.5,
-          })),
-        };
-        setMessages((prev) => [...prev, providerMessage]);
-      } else {
-        // Fallback to generator agent with safety instruction to prevent duplicates
-        pushLog("[Matchmaker Engine]: No local match. Handing off to synthesis layer...");
+      // 2. If less than 3 exact matches, trigger AI synthesis to generate a local option in that specific sector
+      if (finalMatches.length < 3) {
+        pushLog("[Matchmaker Engine]: Need more local candidates. Triggering AI synthesis layer...");
+        
         const genModel = genAI.getGenerativeModel({
           model: "gemini-3.1-flash-lite",
           systemInstruction:
-            "You are a Matchmaker Agent. Generate a realistic Pakistani service worker profile. Ensure name diversity. Do NOT use Muhammad Asif under any circumstances.",
+            `You are a Matchmaker Agent. Generate one realistic Pakistani service worker profile for the requested service. Ensure name diversity. Do NOT use "Muhammad Asif" under any circumstances. Do not invent distance values; routing distance is calculated by the app.`,
           generationConfig: {
             responseMimeType: "application/json",
             responseSchema: {
@@ -283,11 +317,12 @@ export default function ChatScreen() {
           },
         });
 
-        const profilePrompt = `Generate a worker profile for a ${summary.service_category} in ${summary.area}, ${summary.city}.`;
+        const profilePrompt = `Generate a worker profile for a ${summary.service_category} matching a customer request in ${summary.area}, ${summary.city}.`;
         pushLog("[Synthesis Engine]: Resolving realistic provider data points...");
         const profileResult = await genModel.generateContent(profilePrompt);
         const profileData = JSON.parse(profileResult.response.text());
 
+        // Insert synthetic user into DB
         const userResult = db.runSync(
           "INSERT INTO Users (phone_number, password, role, name) VALUES (?, ?, ?, ?)",
           [
@@ -298,7 +333,7 @@ export default function ChatScreen() {
           ],
         );
 
-        const dynamicDist = Math.random() * 4.5 + 0.5;
+        // Insert provider into DB
         const providerResult = db.runSync(
           "INSERT INTO Providers (user_id, service_category, location_area, rating, status, hourly_rate, distance_km) VALUES (?, ?, ?, ?, ?, ?, ?)",
           [
@@ -308,32 +343,81 @@ export default function ChatScreen() {
             profileData.rating,
             "AVAILABLE",
             profileData.hourlyRate,
-            dynamicDist,
+            calculateDynamicDistance(summary.area, summary.area),
           ],
         );
 
-        pushLog(`[Generator Agent]: Assigned proximity (${dynamicDist.toFixed(1)} km) and synthetic rating.`);
+        pushLog(`[Generator Agent]: Assigned local proximity (${calculateDynamicDistance(summary.area, summary.area).toFixed(1)} km) and synthetic rating.`);
         pushLog("[Generator Agent]: Committed new profile to database.");
 
-        const providerMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          sender: "system",
-          logs: [...activeLogs],
-          providersData: [
-            {
-              id: providerResult.lastInsertRowId,
-              name: profileData.name,
-              serviceCategory: summary.service_category,
-              area: summary.area,
-              jobArea: summary.area,
-              rating: profileData.rating,
-              hourlyRate: profileData.hourlyRate,
-              distance: dynamicDist,
-            },
-          ],
-        };
-        setMessages((prev) => [...prev, providerMessage]);
+        // Add the synthetic match to our final matches
+        finalMatches.push({
+          id: providerResult.lastInsertRowId,
+          name: profileData.name,
+          rating: profileData.rating,
+          hourly_rate: profileData.hourlyRate,
+          location_area: summary.area,
+          computedDistance: calculateDynamicDistance(summary.area, summary.area),
+        });
       }
+
+      // 3. If we STILL have less than 3 matches, query other fallback matches from the database (other areas) to fill the pool
+      if (finalMatches.length < 3) {
+        pushLog("[Matchmaker Engine]: Querying fallback routes to fill the candidate pool...");
+        const existingIds = finalMatches.map(m => m.id);
+        const placeholders = existingIds.length > 0 ? existingIds.join(',') : '-1';
+        const fallbackMatches = db.getAllSync<{
+          id: number;
+          name: string;
+          rating: number;
+          hourly_rate?: number;
+          location_area: string;
+        }>(
+          `SELECT p.id, u.name, p.rating, p.hourly_rate, p.location_area 
+           FROM Providers p 
+           JOIN Users u ON p.user_id = u.id 
+           WHERE p.service_category = ? AND p.id NOT IN (${placeholders})`,
+          [summary.service_category]
+        );
+
+        if (fallbackMatches && fallbackMatches.length > 0) {
+          const rankedFallbacks = fallbackMatches
+            .map((match) => ({
+              ...match,
+              computedDistance: calculateDynamicDistance(summary.area, match.location_area),
+            }))
+            .sort((a, b) => a.computedDistance - b.computedDistance || b.rating - a.rating);
+
+          finalMatches = [
+            ...finalMatches,
+            ...rankedFallbacks.slice(0, 3 - finalMatches.length),
+          ];
+        }
+      }
+
+      finalMatches = finalMatches.sort(
+        (a, b) => a.computedDistance - b.computedDistance || b.rating - a.rating
+      );
+
+      // Show the finalized list of matches (at most 3)
+      pushLog(`[Matchmaker Engine]: Finalized ${finalMatches.length} prioritized matches.`);
+      
+      const providerMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: "system",
+        logs: [...activeLogs],
+        providersData: finalMatches.slice(0, 3).map((match) => ({
+          id: match.id,
+          name: match.name,
+          serviceCategory: summary.service_category,
+          area: match.location_area || summary.area,
+          jobArea: summary.area,
+          rating: match.rating,
+          hourlyRate: match.hourly_rate || 500,
+          distance: match.computedDistance,
+        })),
+      };
+      setMessages((prev) => [...prev, providerMessage]);
     } catch (e: any) {
       console.error(e);
       pushLog(`[Error]: Matchmaking failed - ${e.message}`);
@@ -343,7 +427,14 @@ export default function ChatScreen() {
     }
   };
 
-  const handleCancelMatch = () => {
+  const handleCancelMatch = (messageId?: string) => {
+    if (messageId) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, confirmationResponded: "NO" } : m
+        )
+      );
+    }
     setIsConfirming(false);
     setExtractedSummary(null);
     const cancelMessage: Message = {
@@ -359,6 +450,7 @@ export default function ChatScreen() {
 
     // 1. Render Double-Confirmation Summary Card
     if (item.isConfirmationCard && item.confirmationData) {
+      const isResponded = !!item.confirmationResponded;
       return (
         <View style={styles.confirmCard}>
           <Text style={styles.confirmTitle}>📋 Request Confirmation</Text>
@@ -369,11 +461,25 @@ export default function ChatScreen() {
           </View>
           <Text style={styles.confirmPrompt}>Does this look correct?</Text>
           <View style={styles.confirmActions}>
-            <TouchableOpacity style={styles.confirmBtnYes} onPress={() => handleConfirmMatch(item.confirmationData)}>
-              <Text style={styles.confirmBtnTextYes}>Yes, Find a Karigar</Text>
+            <TouchableOpacity 
+              style={[
+                styles.confirmBtnYes, 
+                isResponded && (item.confirmationResponded === "YES" ? styles.confirmBtnActive : styles.confirmBtnDisabled)
+              ]} 
+              onPress={() => handleConfirmMatch(item.confirmationData, item.id)}
+              disabled={isResponded}
+            >
+              <Text style={[styles.confirmBtnTextYes, isResponded && item.confirmationResponded !== "YES" && { color: '#050505' }]}>Yes, Find a Karigar</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.confirmBtnNo} onPress={handleCancelMatch}>
-              <Text style={styles.confirmBtnTextNo}>No, Edit</Text>
+            <TouchableOpacity 
+              style={[
+                styles.confirmBtnNo, 
+                isResponded && (item.confirmationResponded === "NO" ? styles.confirmBtnActive : styles.confirmBtnDisabled)
+              ]} 
+              onPress={() => handleCancelMatch(item.id)}
+              disabled={isResponded}
+            >
+              <Text style={[styles.confirmBtnTextNo, isResponded && item.confirmationResponded !== "NO" && { color: '#8A8D91' }]}>No, Edit</Text>
             </TouchableOpacity>
           </View>
           {!isUser && item.logs && <CollapsibleLog logs={item.logs} />}
@@ -805,6 +911,13 @@ const styles = StyleSheet.create({
     color: '#050505',
     fontWeight: '700',
     fontSize: 15,
+  },
+  confirmBtnDisabled: {
+    backgroundColor: '#E4E6EB',
+    opacity: 0.5,
+  },
+  confirmBtnActive: {
+    opacity: 1,
   },
   // Receipt Card Styles
   receiptCard: {
