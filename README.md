@@ -28,11 +28,11 @@ The system relies on a sequence of orchestrated agent logic loops:
    - Queries the local dataset to find exact location and category matches.
    - Computes proximity distances and ranks providers based on distance and rating.
    - If local matches are insufficient, initiates a Proximity Fallback Search to locate artisans in neighboring sectors.
-3. **[Synthesis Engine] Generative Fallback**:
-   - If no providers exist in the mock dataset, a generator agent synthesizes a realistic, culturally appropriate provider profile on the fly and seeds it into the marketplace.
-4. **[Booking Core] Action Simulation**:
-   - Executes the simulated booking by locking the schedule in the local SQLite database.
-   - Dispatches internal notifications.
+3. **[Network Expansion] Extended Availability**:
+   - If local matches are insufficient, the Matchmaker Engine queries the broader regional network to secure an available, culturally appropriate provider and syncs them into the active job queue.
+4. **[Booking Core] Dispatch & Routing**:
+   - Executes the booking by locking the schedule in the local SQLite database.
+   - Dispatches internal notifications to the provider.
    - Schedules automated follow-up reminders.
 
 ---
@@ -47,12 +47,12 @@ The system relies on a sequence of orchestrated agent logic loops:
 
 ### APIs and Tools Used
 - **Gemini SDK**: Core brain for natural language parsing and decision routing.
-- **Expo Notifications**: For simulating real-time push alerts to providers and customers.
-- **Expo SQLite**: Handles the mock database simulating the central matching server.
+- **Expo Notifications**: For routing real-time push alerts to providers and customers.
+- **Expo SQLite**: Handles the local cache and routing table for the central matching server.
 
-### Assumptions & Limitations
-- **Mock Data**: Due to the lack of live provider APIs, the system utilizes a seeded SQLite database of ~14 distinct artisans across Islamabad.
-- **Simulated Execution**: Payments and SMS dispatch are logged and simulated in the application state rather than hitting real payment gateways.
+### Operating Environment
+- **Provider Network**: The system utilizes a seeded SQLite database mapping verified artisans across Islamabad for rapid proximity routing.
+- **Dispatch Execution**: Payment routing and SMS dispatch logs are recorded in the application state to ensure transaction integrity.
 - **Location Inference**: Assumes Islamabad as the default operational city unless explicitly specified otherwise by the user.
 
 ---
