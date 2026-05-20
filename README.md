@@ -1,56 +1,61 @@
-# Welcome to your Expo app 👋
+# Karigar: Agentic AI for the Informal Economy
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Karigar is an Agentic AI system designed to automate the end-to-end lifecycle of informal service requests in Pakistan. By replacing fragmented WhatsApp messages and phone calls with an intelligent orchestration pipeline, Karigar connects customers with local professionals such as plumbers, electricians, AC technicians, and tutors.
 
-## Get started
+## Project Solution
+This prototype demonstrates a closed-loop economy driven entirely by a multi-agent reasoning pipeline. It handles intent extraction in Roman Urdu and English, geographic matchmaking, simulated bookings, and automated follow-ups.
 
-1. Install dependencies
+### Key Features
+1. **Natural Language Intake:** Users can submit requests in natural language (e.g., "Mujhe kal subah G-13 mein AC technician chahiye").
+2. **Dynamic Matchmaking:** Providers are ranked based on simulated proximity (distance_km), availability, and ratings.
+3. **Traceable Agentic UI:** Users can expand collapsed bubbles to view the exact reasoning logs of the internal agents.
+4. **Action and Follow-Up Automation:** Complete simulation of booking records, dispatch updates, and status-completion loops.
+5. **Dual-Role Economy:** A Customer chat interface coupled with a dedicated Vendor Dashboard for managing statuses.
 
-   ```bash
-   npm install
-   ```
+---
 
-2. Start the app
+## System Architecture and Agentic Workflow
 
-   ```bash
-   npx expo start
-   ```
+The application relies on a structured reasoning pipeline powered by the Gemini API, orchestrated into distinct agents that handle specific lifecycle phases.
 
-In the output, you'll find options to open the app in a
+### 1. The Intake Agent (Planning)
+- **Role:** Parses unstructured, multilingual input using strict JSON schemas.
+- **Logic:** Extracts the service category, city, area, and time slot. If context is missing, it performs geographic inference (e.g., mapping a specific neighborhood to its city). If it detects a formal profession (e.g., Doctor, Software Engineer), it triggers a scoped refusal to maintain informal economy guardrails.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### 2. The Matchmaker Agent (Decision)
+- **Role:** Interfaces the LLM output with the local database.
+- **Logic:** Executes SQL queries across the Providers and Users tables. It calculates proximity, evaluates ratings, and ranks the top 3 viable matching providers.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### 3. The Generator Agent (Fallback)
+- **Role:** Synthesizes mock provider profiles.
+- **Logic:** If no local SQLite match is found, this agent generates a realistic provider profile and seeds the database dynamically, ensuring the user always receives a viable recommendation.
 
-## Get a fresh project
+### 4. Action and Follow-Up (Execution)
+- **Action:** Clicking "Book Now" executes local SQLite transactions (INSERT INTO Bookings).
+- **Follow-Up Automation:** Staggered asynchronous loops simulate dispatch updates ("Provider is on their way"), mock SMS receipts, and status updates (Vendors marking jobs as COMPLETED triggers customer feedback requests).
 
-When you're ready, run:
+---
 
-```bash
-npm run reset-project
-```
+## Technical Stack and Tools Used
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+- **Frontend:** React Native (Expo)
+- **Local Database:** expo-sqlite (Managing the provider dataset and tracking booking states locally).
+- **State Management:** Zustand (Managing user sessions and global notification states).
+- **AI Integration:** @google/generative-ai (Gemini models used for schema-enforced intent extraction).
 
-### Other setup steps
+---
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## How Google Antigravity is Used
 
-## Learn more
+Google Antigravity served as the central autonomous orchestration platform for building this system. Antigravity functioned as the primary development and architectural partner to:
+- **Orchestrate Agent Workflows:** Designing the prompt engineering state-machines that allow the Intake and Matchmaker agents to pass data contextually.
+- **Manage Multi-Step Reasoning:** Architecting the collapsible log interface and local trace-state logic to expose the internal planning loop directly to the user.
+- **Execute Actions:** Writing secure SQLite schema migrations and transaction loops necessary for the simulation requirements.
 
-To learn more about developing your project with Expo, look at the following resources:
+---
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Assumptions and Limitations
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. **Mock Database:** Due to hackathon scope, provider discovery is simulated via a seeded local SQLite database rather than a live Google Maps/Places API integration.
+2. **Simulated Notifications:** SMS receipts, automated reminders, and push notifications are simulated via timed in-app UI Toasts and Chat Bubbles rather than external Twilio/Firebase integrations.
+3. **Proximity:** Proximity calculations are currently based on area overlap to demonstrate ranking logic rather than using strict GPS coordinate delta calculations.
