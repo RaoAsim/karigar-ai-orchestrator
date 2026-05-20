@@ -26,7 +26,7 @@ Instead of a backend, the React Native app acts as the "Orchestrator" using the 
 
 1. **Agent 1 (The Intake Router):** The user sends a chat message. The app calls Gemini with a strict System Instruction to extract the intent and return a JSON object containing `{ service_category, location, time_slot }`.
 2. **Agent 2 (The Matchmaker):** The app takes Gemini's JSON and executes a local SQL query on `expo-sqlite`.
-   - _Fallback:_ If SQLite returns 0 results, the app calls Gemini again to dynamically generate a realistic fake provider profile, inserts it into SQLite, and proceeds.
+   - _Fallback:_ If SQLite returns 0 results, the app calls Gemini again to dynamically expand the provider network, finds the best match in the extended vicinity, and proceeds.
 3. **Agent 3 (The Coordinator):** When the user clicks "Book", the app writes to the `Bookings` table and updates the UI state to show simulated notifications.
 
 ## 5. Phased Implementation Plan
